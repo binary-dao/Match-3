@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public class GameBehaviour : MonoBehaviour {
+    internal const int SCORES_FOR_CHIP = 100;
     const int BASE_CHIP_TYPES = 6;
 
     //min 3, max 10
@@ -17,13 +18,15 @@ public class GameBehaviour : MonoBehaviour {
 
     private System.Random random;
 
-    public ChipBehaviour selectedChip;
+    internal ChipBehaviour selectedChip;
     private ChipBehaviour secondChip;
 
-    public static GameBehaviour instance;
+    internal static GameBehaviour instance;
 
     //we should get both chips moving end before processing next
     private int movingCounter;
+
+    public int scorePoints = 0;
 
     // Use this for initialization
     void Start () {
@@ -63,10 +66,11 @@ public class GameBehaviour : MonoBehaviour {
                 ChipBehaviour chipBehaviour = chip.GetComponent<ChipBehaviour>();
                 chipArray[i, j] = chipBehaviour;
                 int type = GetRandomTypeForChip(i, j);
-                chipBehaviour.Create(field, type, i, j, useGravity);
+                chipBehaviour.Create(type, i, j, useGravity);
             }
         }
-        if (IsAnyPossibleMoves())
+        GeneratePatchForField();
+        /*if (IsAnyPossibleMoves())
         {
             Debug.Log("There ARE possible moves.");
         }
@@ -75,7 +79,7 @@ public class GameBehaviour : MonoBehaviour {
             //ok, there is no turns at start, so we generate a one turn as an exception
             Debug.Log("There are NO possible moves. Generating patch.");
             GeneratePatchForField();
-        }
+        }*/
     }
 
     //set another type for two adjacent chips to generate one move in case of no moves
@@ -92,11 +96,11 @@ public class GameBehaviour : MonoBehaviour {
         field.transform.position = new Vector2(-halfWidth, -halfHeight);
     }
 
-    public void TrySwipeWith(ChipBehaviour secondChip)
+    internal void TrySwipeWith(ChipBehaviour secondChip)
     {
         Debug.Log("TrySwipe");
         DisablePhysics();
-        this.secondChip = selectedChip;
+        this.secondChip = secondChip;
         movingCounter = 0;
         selectedChip.MoveTo(secondChip.gameObject.transform.position);
         secondChip.MoveTo(selectedChip.gameObject.transform.position);
@@ -112,75 +116,118 @@ public class GameBehaviour : MonoBehaviour {
             return;
         }
 
-        Vector2 transitPoint = new Vector2(selectedChip.row, selectedChip.col);
+        Debug.Log("OnMovingEnd");
+        Debug.Log("selecteChip.row: " + selectedChip.row);
+        Debug.Log("selecteChip.col: " + selectedChip.col);
+        Debug.Log("secondChip.row: " + secondChip.row);
+        Debug.Log("secondChip.col: " + secondChip.col);
+
+        int transitRow = selectedChip.row;
+        int transitCol = selectedChip.col;
         selectedChip.row = secondChip.row;
         selectedChip.col = secondChip.col;
-        secondChip.row = (int)transitPoint.x;
-        secondChip.col = (int)transitPoint.y;
+        secondChip.row = transitRow;
+        secondChip.col = transitCol;
 
-        СheckAndDestroyForChip(selectedChip.row, selectedChip.col);
-        //СheckAndDestroyForChip(secondChip.row, secondChip.col);
+        Debug.Log("After exchange");
+        Debug.Log("selectedChip.row: " + selectedChip.row);
+        Debug.Log("selectedChip.col: " + selectedChip.col);
+        Debug.Log("secondChip.row: " + secondChip.row);
+        Debug.Log("secondChip.col: " + secondChip.col);
+
+        chipArray[selectedChip.row, selectedChip.col] = selectedChip;
+        chipArray[secondChip.row, secondChip.col] = secondChip;
+
+        СheckAndDestroyForChip(selectedChip);
+        СheckAndDestroyForChip(secondChip);
     }
 
-    private bool СheckAndDestroyForChip(int row, int col)
+    private bool СheckAndDestroyForChip(ChipBehaviour chip)
     {
-        int horizontalLine = 0;
-        int verticalLine = 0;
+        
+        //int horizontalLine = 1;
+        //int verticalLine = 1;
+        List<ChipBehaviour> horizontalLine = new List<ChipBehaviour>();
+        List<ChipBehaviour> verticalLine = new List<ChipBehaviour>();
 
-        int type = SafeGetType(row, col);
+        //first chip is it itself
+        horizontalLine.Add(chip);
+        verticalLine.Add(chip);
+
+        int row = chip.row;
+        int col = chip.col;
+
+        Debug.Log("row:" + row + "; col:" + col);
+
+        /*int current = SafeGetType(row, col);
         int up = SafeGetType(row + 1, col);
         int down = SafeGetType(row - 1, col);
         int left = SafeGetType(row, col - 1);
-        int right = SafeGetType(row, col + 1);
+        int right = SafeGetType(row, col + 1);*/
+
+        //Debug.Log("row:"+ row + " col:" + col + " current:" + current + " up:" + up + " down:" + down + " left:" + left + " right:" + right);
+
+        int currentType = SafeGetType(chip.row, chip.col);
 
         //UP
-        if (SafeGetType(row, col) == SafeGetType(row + 1, col))
+        if (currentType == SafeGetType(row + 1, col))
         {
-            verticalLine++;
-            if (SafeGetType(row, col) == SafeGetType(row + 2, col))
+            verticalLine.Add(chipArray[row + 1, col]);
+            if (currentType == SafeGetType(row + 2, col))
             {
-                verticalLine++;
+                verticalLine.Add(chipArray[row + 2, col]);
             }
         }
         //DOWN
-        if (SafeGetType(row, col) == SafeGetType(row - 1, col))
+        if (currentType == SafeGetType(row - 1, col))
         {
-            verticalLine++;
-            if (SafeGetType(row, col) == SafeGetType(row - 2, col))
+            verticalLine.Add(chipArray[row - 1, col]);
+            if (currentType == SafeGetType(row - 2, col))
             {
-                verticalLine++;
+                verticalLine.Add(chipArray[row - 2, col]);
             }
-        }
-        if (verticalLine >= 3)
-        {
-            Debug.Log("It's vertical line in (" + row + ";" + col + ")");
         }
 
         //LEFT
-        if (SafeGetType(row, col) == SafeGetType(row, col - 1))
+        if (currentType == SafeGetType(row, col - 1))
         {
-            horizontalLine++;
-            if (SafeGetType(row, col) == SafeGetType(row, col - 2))
+            horizontalLine.Add(chipArray[row, col - 1]);
+            if (currentType == SafeGetType(row, col - 2))
             {
-                horizontalLine++;
+                horizontalLine.Add(chipArray[row, col - 2]);
             }
         }
         //RIGHT
-        if (SafeGetType(row, col) == SafeGetType(row, col + 1))
+        if (currentType == SafeGetType(row, col + 1))
         {
-            horizontalLine++;
-            if (SafeGetType(row, col) == SafeGetType(row, col + 2))
+            horizontalLine.Add(chipArray[row, col + 1]);
+            if (currentType == SafeGetType(row, col + 2))
             {
-                horizontalLine++;
+                horizontalLine.Add(chipArray[row, col + 2]);
             }
         }
-        if (horizontalLine >= 3)
+
+        if(horizontalLine.Count >= 3)
         {
             Debug.Log("It's horizontalLine line in (" + row + ";" + col + ")");
+            foreach (ChipBehaviour iterChip in horizontalLine)
+            {
+                Debug.Log("(" + iterChip.row + ";" + iterChip.col + ")");
+                iterChip.StartDestroy();
+            }
         }
 
-        Debug.Log("horizontalLine:" + horizontalLine + "; verticalLine:" + verticalLine);
-        return (verticalLine >= 3 || horizontalLine >= 3);
+        if (verticalLine.Count >= 3)
+        {
+            Debug.Log("It's vertical line in (" + row + ";" + col + ")");
+            foreach (ChipBehaviour iterChip in verticalLine)
+            {
+                Debug.Log("(" + iterChip.row + ";" + iterChip.col + ")");
+                iterChip.StartDestroy();
+            }
+        }
+
+        return (verticalLine.Count >= 3 || horizontalLine.Count >= 3);
     }
 
     private void DisablePhysics()
@@ -246,14 +293,18 @@ public class GameBehaviour : MonoBehaviour {
 
     private bool IsAnyPossibleMoves()
     {
+        bool isPossible = false;
         for (int i = 0; i < MAX_ROWS; i++)
         {
             for (int j = 0; j < MAX_COLS; j++)
             {
-                IsPossibleMovesForChip(i, j);
+                if(IsPossibleMovesForChip(i, j))
+                {
+                    isPossible = true;
+                }
             }
         }
-        return true;
+        return isPossible;
     }
 
     private bool IsPossibleMovesForChip(int row, int col)

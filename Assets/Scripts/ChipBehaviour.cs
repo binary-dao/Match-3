@@ -4,8 +4,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public class ChipBehaviour : MonoBehaviour {
-    public const int ICON_WIDTH = 1;
-    public const int ICON_HEIGHT = 1;
+    internal const int ICON_WIDTH = 1;
+    internal const int ICON_HEIGHT = 1;
 
     //destroying animation
     private const float DESTROY_TIME = 0.3f;
@@ -27,13 +27,11 @@ public class ChipBehaviour : MonoBehaviour {
     //selected halo
     Component halo;
 
-    public int row;
-    public int col;
+    internal int row;
+    internal int col;
     private int type;
 
-    private GameObject holder;
-
-    public int Type
+    internal int Type
     {
         get
         {
@@ -85,11 +83,10 @@ public class ChipBehaviour : MonoBehaviour {
         }
     }
 
-    internal void Create(GameObject holder, int type, int row, int col, bool useGravity)
+    internal void Create(int type, int row, int col, bool useGravity)
     {
         this.row = row;
         this.col = col;
-        this.holder = holder;
         ChangeType(type);
         
         if (!useGravity)
@@ -110,7 +107,7 @@ public class ChipBehaviour : MonoBehaviour {
         transform.position = new Vector2(col * ICON_WIDTH, row * ICON_HEIGHT);
     }
 
-    public void MoveTo(Vector2 newPosition)
+    internal void MoveTo(Vector2 newPosition)
     {
         startTime = Time.time;
         startPosition = transform.position;
@@ -177,13 +174,18 @@ public class ChipBehaviour : MonoBehaviour {
         return (xRange + yRange == 1);
     }
 
-    public void SetHalo(bool enabled)
+    internal void SetHalo(bool enabled)
     {
         halo.GetType().GetProperty("enabled").SetValue(halo, enabled, null);
     }
 
-    private void StartDestroy()
+    internal void StartDestroy()
     {
+        if(isDestroying)
+        {
+            return;
+        }
+        GameBehaviour.instance.scorePoints += GameBehaviour.SCORES_FOR_CHIP;
         startTime = Time.time;
         isDestroying = true;
     }
