@@ -14,17 +14,36 @@ public class ChipBehaviour : MonoBehaviour {
     private float startTime;
     private Color finalColor;
 
+    //moving animation
+    private const float MOVE_TIME = 0.5f;
+    private bool isMoving;
+    private Vector2 startPosition;
+    private Vector2 endPosition;
+
+    //swipe support
+    private static ChipBehaviour startSwipeChip;
+    private static ChipBehaviour lastMouseEnterSprite;
+
+    //selected halo
     Component halo;
 
     public int row;
     public int col;
+    private int type;
 
-    //moving animation
-    private const float MOVE_TIME = 0.3f;
-    private float startX;
-    private float startY;
-    private float endX;
-    private float endY;
+    private GameObject holder;
+
+    public int Type
+    {
+        get
+        {
+            return type;
+        }
+        set
+        {
+            ChangeType(value);
+        }
+    }
 
     // Use this for initialization
     void Start()
@@ -50,6 +69,19 @@ public class ChipBehaviour : MonoBehaviour {
             {
                 spriteRenderer.color = Color.Lerp(Color.white, finalColor, part);
             }
+        } 
+        else if(isMoving)
+        {
+            float part = (Time.time - startTime) / MOVE_TIME;
+            if (part >=1 )
+            {
+                isMoving = false;
+                GameBehaviour.instance.OnMovingEnd();
+            }
+            else
+            {
+                transform.position = Vector2.Lerp(startPosition, endPosition, part);
+            }
         }
     }
 
@@ -57,11 +89,9 @@ public class ChipBehaviour : MonoBehaviour {
     {
         this.row = row;
         this.col = col;
-        Texture2D texture = (Texture2D)Resources.Load("chip" + type);
-        Sprite runtimeSprite = Sprite.Create(texture, new Rect(0.0f, 0.0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100.0f);
-        gameObject.GetComponent<SpriteRenderer>().sprite = runtimeSprite;
-        transform.position = new Vector2(col * ICON_WIDTH, row * ICON_HEIGHT);
-
+        this.holder = holder;
+        ChangeType(type);
+        
         if (!useGravity)
         {
             Rigidbody rigidbody = gameObject.GetComponent<Rigidbody>();
@@ -69,45 +99,81 @@ public class ChipBehaviour : MonoBehaviour {
             //rigidbody.constraints = RigidbodyConstraints.FreezePositionY;
             rigidbody.constraints = RigidbodyConstraints.FreezeAll;
         }
+    }
 
+    private void ChangeType(int type)
+    {
+        this.type = type;
+        Texture2D texture = (Texture2D)Resources.Load("chip" + type);
+        Sprite runtimeSprite = Sprite.Create(texture, new Rect(0.0f, 0.0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100.0f);
+        gameObject.GetComponent<SpriteRenderer>().sprite = runtimeSprite;
+        transform.position = new Vector2(col * ICON_WIDTH, row * ICON_HEIGHT);
+    }
 
+    public void MoveTo(Vector2 newPosition)
+    {
+        startTime = Time.time;
+        startPosition = transform.position;
+        endPosition = newPosition;
+        isMoving = true;
+    }
+
+    private void OnMouseDown()
+    {
+        startSwipeChip = this;
+    }
+
+    private void OnMouseEnter()
+    {
+        lastMouseEnterSprite = this;
     }
 
     private void OnMouseUp()
     {
-        //uncheck chip
-        if(GameBehaviour.selectedChip == this)
+        if (startSwipeChip != lastMouseEnterSprite)
         {
+            GameBehaviour.instance.selectedChip = startSwipeChip;
+            if(IsChipsAdjacent(startSwipeChip, lastMouseEnterSprite))
+            {
+                GameBehaviour.instance.TrySwipeWith(lastMouseEnterSprite);
+            }
+            return;
+        }
+        
+        //uncheck chip
+        if(GameBehaviour.instance.selectedChip == this)
+        {
+            startSwipeChip = null;
             SetHalo(false);
-            GameBehaviour.selectedChip = null;
+            GameBehaviour.instance.selectedChip = null;
         }
         //no previous checks
-        else if (!GameBehaviour.selectedChip)
+        else if (!GameBehaviour.instance.selectedChip)
         { 
             SetHalo(true);
-            GameBehaviour.selectedChip = this;
+            GameBehaviour.instance.selectedChip = this;
         }
         //try to change places?
-        else if (IsChipsAdjacent())
+        else if (IsChipsAdjacent(GameBehaviour.instance.selectedChip, this))
         {
             SetHalo(false);
-            GameBehaviour.selectedChip.SetHalo(false);
-            GameBehaviour.TrySwipe(GameBehaviour.selectedChip, this);
+            GameBehaviour.instance.selectedChip.SetHalo(false);
+            GameBehaviour.instance.TrySwipeWith(this);
         }
         //not adjacent, lets check another chip
         else
         {
-            GameBehaviour.selectedChip.SetHalo(false);
+            GameBehaviour.instance.selectedChip.SetHalo(false);
             SetHalo(true);
-            GameBehaviour.selectedChip = this;
+            GameBehaviour.instance.selectedChip = this;
         }
         
     }
 
-    private bool IsChipsAdjacent()
+    private bool IsChipsAdjacent(ChipBehaviour firstChip, ChipBehaviour secondChip)
     {
-        int xRange = Math.Abs(col - GameBehaviour.selectedChip.col);
-        int yRange = Math.Abs(row - GameBehaviour.selectedChip.row);
+        int xRange = Math.Abs(firstChip.col - secondChip.col);
+        int yRange = Math.Abs(firstChip.row - secondChip.row);
         return (xRange + yRange == 1);
     }
 
