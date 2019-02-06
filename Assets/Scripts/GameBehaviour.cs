@@ -2,16 +2,19 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class GameBehaviour : MonoBehaviour {
     internal const int SCORES_FOR_CHIP = 100;
     const int BASE_CHIP_TYPES = 6;
+    const int TURNS_FOR_GAME = 20;
+    const int SCORES_TO_WIN = 10000;
 
-    //min 3, max 10
-    const int MAX_ROWS = 5;
+    //min 3, max 9
+    const int MAX_ROWS = 6;
 
     //min 3, max 20
-    const int MAX_COLS = 5;
+    const int MAX_COLS = 6;
 
     GameObject field;
     private ChipBehaviour[,] chipArray = new ChipBehaviour[MAX_ROWS, MAX_COLS];
@@ -26,7 +29,15 @@ public class GameBehaviour : MonoBehaviour {
     //we should get both chips moving end before processing next
     private int movingCounter;
 
-    public int scorePoints = 0;
+    private int scorePoints = 0;
+    private int turnsLeft;
+
+    //how much chips we should wait before reenabling physics?
+    internal int destroyWaiting;
+
+    internal float fieldHalfHeight;
+
+    bool isShowRules;
 
     // Use this for initialization
     void Start () {
@@ -37,12 +48,50 @@ public class GameBehaviour : MonoBehaviour {
         random = new System.Random();
         GenerateField();
         CenterField();
+
+        TurnsLeft = TURNS_FOR_GAME;
+
+        PauseGame();
+        //isShowRules = true;
     }
+
+    
 
     // Update is called once per frame
     void Update () {
 		
 	}
+
+    private void PauseGame()
+    {
+    }
+
+    void OnGUI()
+    {
+        Texture2D texture = (Texture2D)Resources.Load("windowColor");
+        GUI.skin.window.normal.background = texture;
+        GUI.skin.window.onFocused.background = texture;
+        GUI.skin.window.onHover.background = texture;
+        GUI.skin.window.onNormal.background = texture;
+        if (isShowRules)
+        {
+            GUI.Window(0, new Rect((Screen.width / 2) - 150, (Screen.height / 2) - 75, 300, 100), showMission, "Mission");
+        }
+    }
+
+    void showMission(int windowID)
+    {
+        GUI.Label(new Rect(65, 20, 200, 250), "Get " + SCORES_TO_WIN + " scores within " + TURNS_FOR_GAME + " turns. Good luck!");
+
+        if (GUI.Button(new Rect(110, 60, 80, 30), "OK"))
+        {
+            isShowRules = false;
+
+            /*SceneManager.UnloadSceneAsync("EmptyScene");
+            SceneManager.LoadSceneAsync("CheckerScene");*/
+        }
+
+    }
 
     private void GenerateField()
     {
@@ -50,9 +99,9 @@ public class GameBehaviour : MonoBehaviour {
         {
             throw new Exception("Too small field for this game. Generate at least 3*3 field using MAX_ROWS and MAX_COLS constants.");
         }
-        else if (MAX_ROWS > 10 || MAX_COLS > 20)
+        else if (MAX_ROWS > 9 || MAX_COLS > 20)
         {
-            throw new Exception("Too big field for this game. Generate no more than 20*10 field using MAX_ROWS and MAX_COLS constants.");
+            throw new Exception("Too big field for this game. Generate no more than 9*20 field using MAX_ROWS and MAX_COLS constants.");
         }
 
         field = GameObject.Find("Game Field");
@@ -69,8 +118,7 @@ public class GameBehaviour : MonoBehaviour {
                 chipBehaviour.Create(type, i, j, useGravity);
             }
         }
-        GeneratePatchForField();
-        /*if (IsAnyPossibleMoves())
+        if (IsAnyPossibleMoves())
         {
             Debug.Log("There ARE possible moves.");
         }
@@ -79,7 +127,19 @@ public class GameBehaviour : MonoBehaviour {
             //ok, there is no turns at start, so we generate a one turn as an exception
             Debug.Log("There are NO possible moves. Generating patch.");
             GeneratePatchForField();
-        }*/
+        }
+    }
+
+    internal void destroyChip(ChipBehaviour chip)
+    {
+        destroyWaiting--;
+        chipArray[chip.row, chip.col] = null;
+        Debug.Log("destroyChip, destroyWaiting: " + destroyWaiting);
+        if(destroyWaiting <=0 )
+        {
+            Debug.Log("Turn physics on");
+            TurnPhysics(true);
+        }
     }
 
     //set another type for two adjacent chips to generate one move in case of no moves
@@ -94,12 +154,13 @@ public class GameBehaviour : MonoBehaviour {
         float halfWidth = (MAX_COLS - 1) * ChipBehaviour.ICON_WIDTH / 2.0f ;
         float halfHeight = (MAX_ROWS - 1) * ChipBehaviour.ICON_HEIGHT / 2.0f;
         field.transform.position = new Vector2(-halfWidth, -halfHeight);
+        fieldHalfHeight = halfHeight;
     }
 
     internal void TrySwipeWith(ChipBehaviour secondChip)
     {
         Debug.Log("TrySwipe");
-        DisablePhysics();
+        TurnPhysics(false);
         this.secondChip = secondChip;
         movingCounter = 0;
         selectedChip.MoveTo(secondChip.gameObject.transform.position);
@@ -138,8 +199,23 @@ public class GameBehaviour : MonoBehaviour {
         chipArray[selectedChip.row, selectedChip.col] = selectedChip;
         chipArray[secondChip.row, secondChip.col] = secondChip;
 
-        СheckAndDestroyForChip(selectedChip);
-        СheckAndDestroyForChip(secondChip);
+        //evade lazy boolean evaluation
+        bool firstSuccessfull = СheckAndDestroyForChip(selectedChip);
+        bool secondSuccessfull = СheckAndDestroyForChip(secondChip);
+        if(firstSuccessfull||secondSuccessfull)
+        {
+            TurnsLeft--;
+            UpdateScore();
+        }
+        else
+        {
+            MoveChipsBack();
+        }
+    }
+
+    private void MoveChipsBack()
+    {
+        
     }
 
     private bool СheckAndDestroyForChip(ChipBehaviour chip)
@@ -230,15 +306,22 @@ public class GameBehaviour : MonoBehaviour {
         return (verticalLine.Count >= 3 || horizontalLine.Count >= 3);
     }
 
-    private void DisablePhysics()
+    private void TurnPhysics(bool enabled)
     {
         for (int i = 0; i < MAX_ROWS; i++)
         {
             for (int j = 0; j < MAX_COLS; j++)
             {
-                chipArray[i, j].GetComponent<Rigidbody>().isKinematic = false;
-                chipArray[i, j].GetComponent<Rigidbody>().detectCollisions = false;
-                chipArray[i, j].GetComponent<Rigidbody>().useGravity = false;
+                if(chipArray[i,j])
+                {
+                    Rigidbody rigidbody = chipArray[i, j].GetComponent<Rigidbody>();
+                    rigidbody.detectCollisions = enabled;
+                    rigidbody.useGravity = enabled;
+                    if(enabled)
+                    {
+                        rigidbody.constraints = RigidbodyConstraints.FreezeRotation;
+                    }
+                }
             }
         }
     }
@@ -403,5 +486,40 @@ public class GameBehaviour : MonoBehaviour {
             return chipArray[row, col].Type;
         }
         return -1;
+    }
+
+    internal int ScorePoints
+    {
+        get
+        {
+            return scorePoints;
+        }
+
+        set
+        {
+            scorePoints = value;
+            UpdateScore();
+        }
+    }
+
+    private int TurnsLeft
+    {
+        get
+        {
+            return turnsLeft;
+        }
+
+        set
+        {
+            turnsLeft = value;
+            UpdateScore();
+        }
+    }
+
+    private void UpdateScore()
+    {
+        GameObject textFieldObject = GameObject.Find("Score Text");
+        Text textField = textFieldObject.GetComponent<Text>();
+        textField.text = "Score: " + ScorePoints + "     Turns left: " + TurnsLeft;
     }
 }

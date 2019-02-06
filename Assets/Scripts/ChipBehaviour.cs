@@ -7,6 +7,8 @@ public class ChipBehaviour : MonoBehaviour {
     internal const int ICON_WIDTH = 1;
     internal const int ICON_HEIGHT = 1;
 
+    private bool isCreated = false;
+
     //destroying animation
     private const float DESTROY_TIME = 0.3f;
     private SpriteRenderer spriteRenderer;
@@ -61,6 +63,7 @@ public class ChipBehaviour : MonoBehaviour {
             if (part >= 1)
             {
                 isDestroying = false;
+                GameBehaviour.instance.destroyChip(this);
                 Destroy(gameObject);
             }
             else
@@ -81,6 +84,12 @@ public class ChipBehaviour : MonoBehaviour {
                 transform.position = Vector2.Lerp(startPosition, endPosition, part);
             }
         }
+        if(isCreated && transform.position.y < -GameBehaviour.instance.fieldHalfHeight)
+        {
+            Rigidbody rigidbody = gameObject.GetComponent<Rigidbody>();
+            rigidbody.constraints = RigidbodyConstraints.FreezeAll;
+            transform.position = new Vector2(transform.position.x, -GameBehaviour.instance.fieldHalfHeight);
+        }
     }
 
     internal void Create(int type, int row, int col, bool useGravity)
@@ -92,10 +101,9 @@ public class ChipBehaviour : MonoBehaviour {
         if (!useGravity)
         {
             Rigidbody rigidbody = gameObject.GetComponent<Rigidbody>();
-            //gidbody.useGravity = false;
-            //rigidbody.constraints = RigidbodyConstraints.FreezePositionY;
             rigidbody.constraints = RigidbodyConstraints.FreezeAll;
         }
+        isCreated = true;
     }
 
     private void ChangeType(int type)
@@ -185,7 +193,8 @@ public class ChipBehaviour : MonoBehaviour {
         {
             return;
         }
-        GameBehaviour.instance.scorePoints += GameBehaviour.SCORES_FOR_CHIP;
+        GameBehaviour.instance.destroyWaiting++;
+        GameBehaviour.instance.ScorePoints += GameBehaviour.SCORES_FOR_CHIP;
         startTime = Time.time;
         isDestroying = true;
     }
