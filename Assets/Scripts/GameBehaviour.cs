@@ -10,6 +10,7 @@ public class GameBehaviour : MonoBehaviour {
     const int BASE_CHIP_TYPES = 6;
     const int TURNS_FOR_GAME = 20;
     const int SCORES_TO_WIN = 4000;
+    const int TIME_BEFORE_HINT = 5;
 
     //min 4, max 9
     const int MAX_ROWS = 4;
@@ -48,12 +49,17 @@ public class GameBehaviour : MonoBehaviour {
     bool isWaitingChipsFall;
     bool isWin;
     bool isLose;
+    bool isHintShowed;
     internal bool isFieldActive;
 
     bool isMovingBack;
 
     private AudioClip matchSound;
     private AudioSource audioSource;
+
+    private float startTurnTime;
+
+    private Vector4 noMatchVector4 = new Vector4(-1, -1, -1, -1);
 
     // Use this for initialization
     void Start () {
@@ -104,7 +110,23 @@ public class GameBehaviour : MonoBehaviour {
                     CheckWinLose();
             }
         }
+        else
+        {
+            if(!isHintShowed && Time.time - startTurnTime > TIME_BEFORE_HINT)
+            {
+                ShowHint();
+            }
+        }
 	}
+
+    private void ShowHint()
+    {
+        isHintShowed = true;
+        Debug.Log("Show hint");
+        Vector4 hintCoords = GetAnyPossibleMove();
+        chipArray[(int)hintCoords.x, (int)hintCoords.y].SetHalo(true);
+        chipArray[(int)hintCoords.z, (int)hintCoords.w].SetHalo(true);
+    }
 
     //three predefined points for chips, other place at random
     private void Shuffle()
@@ -362,7 +384,8 @@ public class GameBehaviour : MonoBehaviour {
                 chipBehaviour.Create(type, i, j, useGravity);
             }
         }
-        if (IsAnyPossibleMoves())
+        
+        if (GetAnyPossibleMove() != noMatchVector4)
         {
             Debug.Log("There ARE possible moves.");
         }
@@ -660,53 +683,54 @@ public class GameBehaviour : MonoBehaviour {
         return answer;
     }
 
-    private bool IsAnyPossibleMoves()
+    private Vector4 GetAnyPossibleMove()
     {
-        bool isPossible = false;
+        Vector2 noMatchVector = new Vector2(-1, -1);
         for (int i = 0; i < MAX_ROWS; i++)
         {
             for (int j = 0; j < MAX_COLS; j++)
             {
-                if(IsPossibleMovesForChip(i, j))
+                Vector2 answerVector = GetPossibleMovesForChip(i, j);
+                if (answerVector != noMatchVector)
                 {
-                    isPossible = true;
+                    return new Vector4(i, j, answerVector.x, answerVector.y);
                 }
             }
         }
-        return isPossible;
+        return new Vector4(-1,-1,-1,-1);
     }
 
-    private bool IsPossibleMovesForChip(int row, int col)
+    private Vector2 GetPossibleMovesForChip(int row, int col)
     {
         //try move up
         if(row + 1 < MAX_ROWS)
         {
             if (VirtualMoveCheck(row + 1, col, row, col))
-                return true;
+                return new Vector2(row + 1, col);
         }
 
         //try move right
         if(col + 1 < MAX_COLS)
         {
             if (VirtualMoveCheck(row, col + 1, row, col))
-                return true;
+                return new Vector2(row, col + 1);
         }
 
         //try move down
         if (row > 0)
         {
             if (VirtualMoveCheck(row - 1, col, row, col))
-                return true;
+                return new Vector2(row - 1, col);
         }
 
         //try move left
         if (col > 0)
         {
             if (VirtualMoveCheck(row, col - 1, row, col))
-                return true;
+                return new Vector2(row, col - 1);
         }
 
-        return false;
+        return new Vector2(-1, -1);
     }    
 
     //looking for a potential move
@@ -811,10 +835,12 @@ public class GameBehaviour : MonoBehaviour {
 
     private void EnablePlayerControl(bool skipCheck)
     {
-        if(skipCheck || IsAnyPossibleMoves())
+        if(skipCheck || GetAnyPossibleMove() != noMatchVector4)
         {
             SetPhysics(true);
             isFieldActive = true;
+            startTurnTime = Time.time;
+            isHintShowed = false;
         }
         else
         {
