@@ -13,10 +13,10 @@ public class GameBehaviour : MonoBehaviour {
     const int TIME_BEFORE_HINT = 5;
 
     //min 4, max 9
-    const int MAX_ROWS = 4;
+    const int MAX_ROWS = 8;
 
     //min 4, max 18
-    const int MAX_COLS = 4;
+    const int MAX_COLS = 8;
 
     private GameObject field;
     private GameObject pauseButton;
@@ -60,6 +60,8 @@ public class GameBehaviour : MonoBehaviour {
     private float startTurnTime;
 
     private Vector4 noMatchVector4 = new Vector4(-1, -1, -1, -1);
+
+    private int[] bonusRow = new int[MAX_COLS];
 
     // Use this for initialization
     void Start () {
@@ -235,7 +237,12 @@ public class GameBehaviour : MonoBehaviour {
         bool isNewCombinations = false;
         List<ChipBehaviour> line = new List<ChipBehaviour>();
 
+        //uses to generate bonus for both horizontal and vertical line at once
+        List<ChipBehaviour> horizontalLine = new List<ChipBehaviour>();
+
         int currentType = -2;
+
+        bonusRow = new int[MAX_COLS];
 
         //horizontal check
         for(int i = 0; i<MAX_ROWS; i++)
@@ -247,6 +254,14 @@ public class GameBehaviour : MonoBehaviour {
                 {
                     if (line.Count >= 3)
                     {
+                        foreach (ChipBehaviour iterChip in line)
+                        {
+                            horizontalLine.Add(iterChip);
+                        }
+                        if (line.Count >=4)
+                        {
+                            bonusRow[j] = ChipBehaviour.BOMB_TYPE;
+                        }
                         isNewCombinations = true;
                         CollectLine(line);
                     }
@@ -270,6 +285,15 @@ public class GameBehaviour : MonoBehaviour {
                 {
                     if (line.Count >= 3)
                     {
+                        if (line.Count >= 4)
+                        {
+                            bonusRow[j] = ChipBehaviour.ROCKET_TYPE;
+                        }
+                        foreach (ChipBehaviour iterChip in horizontalLine)
+                        {
+                            if (line.Contains(iterChip))
+                                bonusRow[j] = ChipBehaviour.RAINBOW_TYPE;
+                        }
                         isNewCombinations = true;
                         CollectLine(line);
                     }
@@ -437,20 +461,24 @@ public class GameBehaviour : MonoBehaviour {
             if(fillerForCol>0)
             {
                 FillCol(col, fillerForCol);
-                Debug.Log("col:" + col + "; fillerForCol:"+fillerForCol);
             }
         }
     }
 
     private void FillCol(int col, int count)
     {
+        int type;
         for (int i = 0; i < count; i++)
         {
             GameObject chip = (GameObject)Instantiate(Resources.Load("ChipPrefab"));
             chip.transform.parent = field.transform;
             ChipBehaviour chipBehaviour = chip.GetComponent<ChipBehaviour>();
             chipArray[MAX_ROWS - count + i, col] = chipBehaviour;
-            int type = random.Next(0, BASE_CHIP_TYPES);
+
+            if (i == 0 && bonusRow[col] > BASE_CHIP_TYPES)
+                type = bonusRow[col];
+            else
+                type = random.Next(0, BASE_CHIP_TYPES);
             chipBehaviour.Create(type, MAX_ROWS + i, col, true);
             //задать истинные координаты
             chipBehaviour.row = MAX_ROWS - count + i;
@@ -475,6 +503,11 @@ public class GameBehaviour : MonoBehaviour {
     internal void TrySwipeWith(ChipBehaviour secondChip)
     {
         Debug.Log("TrySwipe");
+        for (int i = 0; i < MAX_ROWS; i++)
+            for (int j = 0; j < MAX_COLS; j++)
+                if (chipArray[i, j])
+                    chipArray[i, j].SetHalo(false);
+        bonusRow = new int[MAX_COLS];
         isFieldActive = false;
         SetPhysics(false);
         this.secondChip = secondChip;
@@ -607,13 +640,26 @@ public class GameBehaviour : MonoBehaviour {
         if(horizontalLine.Count >= 3)
         {
             Debug.Log("It's horizontalLine line in (" + row + ";" + col + ")");
+            if (horizontalLine.Count >= 4)
+            {
+                bonusRow[col] = ChipBehaviour.BOMB_TYPE;
+            }
             CollectLine(horizontalLine);
         }
 
         if (verticalLine.Count >= 3)
         {
             Debug.Log("It's vertical line in (" + row + ";" + col + ")");
+            if(verticalLine.Count >=4)
+            {
+                bonusRow[col] = ChipBehaviour.ROCKET_TYPE;
+            }
             CollectLine(verticalLine);
+        }
+
+        if(verticalLine.Count>=3 && horizontalLine.Count >=3)
+        {
+            bonusRow[col] = ChipBehaviour.RAINBOW_TYPE;
         }
 
         return (verticalLine.Count >= 3 || horizontalLine.Count >= 3);
