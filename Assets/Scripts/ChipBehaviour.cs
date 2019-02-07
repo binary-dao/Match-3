@@ -33,6 +33,8 @@ public class ChipBehaviour : MonoBehaviour {
     internal int col;
     private int type;
 
+    internal Rigidbody rigidbody;
+
     internal int Type
     {
         get
@@ -86,7 +88,6 @@ public class ChipBehaviour : MonoBehaviour {
         }
         if(isCreated && transform.position.y < -GameBehaviour.instance.fieldHalfHeight)
         {
-            Rigidbody rigidbody = gameObject.GetComponent<Rigidbody>();
             rigidbody.constraints = RigidbodyConstraints.FreezeAll;
             transform.position = new Vector2(transform.position.x, -GameBehaviour.instance.fieldHalfHeight);
         }
@@ -97,10 +98,11 @@ public class ChipBehaviour : MonoBehaviour {
         this.row = row;
         this.col = col;
         ChangeType(type);
-        
+
+        rigidbody = gameObject.GetComponent<Rigidbody>();
+
         if (!useGravity)
         {
-            Rigidbody rigidbody = gameObject.GetComponent<Rigidbody>();
             rigidbody.constraints = RigidbodyConstraints.FreezeAll;
         }
         isCreated = true;
@@ -136,6 +138,11 @@ public class ChipBehaviour : MonoBehaviour {
     private void OnMouseUp()
     {
         Debug.Log("OnMouseUp");
+        //some animation or moving in process, skip click
+        if(!GameBehaviour.instance.isFieldActive)
+        {
+            return;
+        }
         if (startSwipeChip != lastMouseEnterSprite)
         {
             Debug.Log("OnMouseUp");
@@ -159,6 +166,7 @@ public class ChipBehaviour : MonoBehaviour {
         { 
             SetHalo(true);
             GameBehaviour.instance.selectedChip = this;
+            Debug.Log("Selected chip row:" + row + "; col: " + col);
         }
         //try to change places?
         else if (IsChipsAdjacent(GameBehaviour.instance.selectedChip, this))
@@ -173,6 +181,7 @@ public class ChipBehaviour : MonoBehaviour {
             GameBehaviour.instance.selectedChip.SetHalo(false);
             SetHalo(true);
             GameBehaviour.instance.selectedChip = this;
+            Debug.Log("Selected chip row:" + row + "; col: " + col);
         }
         
     }
@@ -195,6 +204,7 @@ public class ChipBehaviour : MonoBehaviour {
         {
             return;
         }
+        GameBehaviour.instance.isFieldActive = false;
         GameBehaviour.instance.destroyWaiting++;
         GameBehaviour.instance.ScorePoints += GameBehaviour.SCORES_FOR_CHIP;
         startTime = Time.time;

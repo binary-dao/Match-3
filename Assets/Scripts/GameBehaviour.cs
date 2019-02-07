@@ -20,6 +20,7 @@ public class GameBehaviour : MonoBehaviour {
     private GameObject pauseButton;
 
     private ChipBehaviour[,] chipArray = new ChipBehaviour[MAX_ROWS, MAX_COLS];
+    private float[,] previousPositionY = new float[MAX_ROWS, MAX_COLS];
 
     private System.Random random;
 
@@ -37,11 +38,14 @@ public class GameBehaviour : MonoBehaviour {
     //how much chips we should wait before reenabling physics?
     internal int destroyWaiting;
 
+    internal float fieldHalfWidth;
     internal float fieldHalfHeight;
 
     bool isShowRules;
     bool isPaused;
     bool isMuted;
+    bool isWaitingChipsFall;
+    internal bool isFieldActive;
 
     bool isMovingBack;
 
@@ -73,8 +77,28 @@ public class GameBehaviour : MonoBehaviour {
     
 
     // Update is called once per frame
-    void Update () {
-		
+    void Update ()
+    {
+        //some chips are still falling using physics?
+        if (isWaitingChipsFall)
+        {
+            bool isSomethingFalling = false;
+            for (int i = 0; i < MAX_ROWS; i++)
+            {
+                for (int j = 0; j < MAX_COLS; j++)
+                {
+                    //rigidbody.velocity not works there well
+                    if (Math.Abs(chipArray[i, j].rigidbody.transform.position.y - previousPositionY[i, j]) > 0.00001 )
+                        isSomethingFalling = true;
+                    previousPositionY[i, j] = chipArray[i, j].rigidbody.transform.position.y;
+                }
+            }
+            if(!isSomethingFalling)
+            {
+                isWaitingChipsFall = false;
+                isFieldActive = true;
+            }
+        }
 	}
 
     internal void Pause()
@@ -112,6 +136,7 @@ public class GameBehaviour : MonoBehaviour {
             isShowRules = false;
             Pause();
             pauseButton.SetActive(true);
+            isFieldActive = true;
             /*SceneManager.UnloadSceneAsync("EmptyScene");
             SceneManager.LoadSceneAsync("CheckerScene");*/
         }
@@ -158,12 +183,62 @@ public class GameBehaviour : MonoBehaviour {
     internal void destroyChip(ChipBehaviour chip)
     {
         destroyWaiting--;
-        chipArray[chip.row, chip.col] = null;
+        
+        for (int i = chip.row; i<MAX_ROWS-1; i++)
+        {
+            chipArray[i, chip.col] = chipArray[i + 1, chip.col];
+            //can be null for deleted chips
+            if(chipArray[i, chip.col])
+                chipArray[i, chip.col].row = i;
+        }
+        chipArray[MAX_ROWS-1, chip.col] = null;
+
         Debug.Log("destroyChip, destroyWaiting: " + destroyWaiting);
         if(destroyWaiting <=0 )
         {
             Debug.Log("Turn physics on");
+            FillNewChips();
             SetPhysics(true);
+            for(int i = 0; i < MAX_ROWS; i++)
+                for (int j = 0; j < MAX_COLS; j++)
+                    previousPositionY[i, j] = chipArray[i, j].rigidbody.transform.position.y;
+            isWaitingChipsFall = true;
+        }
+    }
+
+    private void FillNewChips()
+    {
+        for(int col = 0; col<MAX_COLS; col++)
+        {
+            int fillerForCol = 0;
+            for (int row = 0 ; row < MAX_ROWS; row++)
+            {
+                if(!chipArray[row,col])
+                {
+                    fillerForCol++;
+                }
+            }
+            if(fillerForCol>0)
+            {
+                FillCol(col, fillerForCol);
+                Debug.Log("col:" + col + "; fillerForCol:"+fillerForCol);
+            }
+        }
+    }
+
+    private void FillCol(int col, int count)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            GameObject chip = (GameObject)Instantiate(Resources.Load("ChipPrefab"));
+            chip.transform.parent = field.transform;
+            ChipBehaviour chipBehaviour = chip.GetComponent<ChipBehaviour>();
+            chipArray[MAX_ROWS - count + i, col] = chipBehaviour;
+            int type = random.Next(0, BASE_CHIP_TYPES);
+            chipBehaviour.Create(type, MAX_ROWS + i, col, true);
+            //задать истинные координаты
+            chipBehaviour.row = MAX_COLS - count + i;
+            chip.transform.position = new Vector2(chip.transform.position.x - fieldHalfWidth, chip.transform.position.y - fieldHalfHeight);
         }
     }
 
@@ -176,21 +251,20 @@ public class GameBehaviour : MonoBehaviour {
 
     private void CenterField()
     {
-        float halfWidth = (MAX_COLS - 1) * ChipBehaviour.ICON_WIDTH / 2.0f ;
-        float halfHeight = (MAX_ROWS - 1) * ChipBehaviour.ICON_HEIGHT / 2.0f;
-        field.transform.position = new Vector2(-halfWidth, -halfHeight);
-        fieldHalfHeight = halfHeight;
+        fieldHalfWidth = (MAX_COLS - 1) * ChipBehaviour.ICON_WIDTH / 2.0f;
+        fieldHalfHeight = (MAX_ROWS - 1) * ChipBehaviour.ICON_HEIGHT / 2.0f;
+        field.transform.position = new Vector2(-fieldHalfWidth, -fieldHalfHeight);
     }
 
     internal void TrySwipeWith(ChipBehaviour secondChip)
     {
         Debug.Log("TrySwipe");
+        isFieldActive = false;
         SetPhysics(false);
         this.secondChip = secondChip;
         movingCounter = 0;
         selectedChip.MoveTo(secondChip.gameObject.transform.position);
         secondChip.MoveTo(selectedChip.gameObject.transform.position);
-    //    selectedChip = null;
     }
 
     private void MoveChipsBack()
@@ -225,9 +299,8 @@ public class GameBehaviour : MonoBehaviour {
             isMovingBack = false;
             selectedChip = null;
             secondChip = null;
-            //ChipBehaviour.startSwipeChip = null;
-            //ChipBehaviour.lastMouseEnterSprite = null;
             SetPhysics(true);
+            isFieldActive = true;
             return;
         }
 
@@ -247,9 +320,6 @@ public class GameBehaviour : MonoBehaviour {
 
     private bool СheckAndDestroyForChip(ChipBehaviour chip)
     {
-        
-        //int horizontalLine = 1;
-        //int verticalLine = 1;
         List<ChipBehaviour> horizontalLine = new List<ChipBehaviour>();
         List<ChipBehaviour> verticalLine = new List<ChipBehaviour>();
 
@@ -262,13 +332,6 @@ public class GameBehaviour : MonoBehaviour {
 
         Debug.Log("row:" + row + "; col:" + col);
 
-        /*int current = SafeGetType(row, col);
-        int up = SafeGetType(row + 1, col);
-        int down = SafeGetType(row - 1, col);
-        int left = SafeGetType(row, col - 1);
-        int right = SafeGetType(row, col + 1);*/
-
-        //Debug.Log("row:"+ row + " col:" + col + " current:" + current + " up:" + up + " down:" + down + " left:" + left + " right:" + right);
 
         int currentType = SafeGetType(chip.row, chip.col);
 
