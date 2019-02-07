@@ -23,8 +23,8 @@ public class ChipBehaviour : MonoBehaviour {
     private Vector2 endPosition;
 
     //swipe support
-    private static ChipBehaviour startSwipeChip;
-    private static ChipBehaviour lastMouseEnterSprite;
+    internal static ChipBehaviour startSwipeChip;
+    internal static ChipBehaviour lastMouseEnterSprite;
 
     //selected halo
     Component halo;
@@ -135,8 +135,10 @@ public class ChipBehaviour : MonoBehaviour {
 
     private void OnMouseUp()
     {
+        Debug.Log("OnMouseUp");
         if (startSwipeChip != lastMouseEnterSprite)
         {
+            Debug.Log("OnMouseUp");
             GameBehaviour.instance.selectedChip = startSwipeChip;
             if(IsChipsAdjacent(startSwipeChip, lastMouseEnterSprite))
             {

@@ -11,12 +11,14 @@ public class GameBehaviour : MonoBehaviour {
     const int SCORES_TO_WIN = 10000;
 
     //min 3, max 9
-    const int MAX_ROWS = 6;
+    const int MAX_ROWS = 9;
 
-    //min 3, max 20
-    const int MAX_COLS = 6;
+    //min 3, max 18
+    const int MAX_COLS = 18;
 
-    GameObject field;
+    private GameObject field;
+    private GameObject pauseButton;
+
     private ChipBehaviour[,] chipArray = new ChipBehaviour[MAX_ROWS, MAX_COLS];
 
     private System.Random random;
@@ -38,6 +40,13 @@ public class GameBehaviour : MonoBehaviour {
     internal float fieldHalfHeight;
 
     bool isShowRules;
+    bool isPaused;
+    bool isMuted;
+
+    bool isMovingBack;
+
+    private AudioClip matchSound;
+    private AudioSource audioSource;
 
     // Use this for initialization
     void Start () {
@@ -49,10 +58,16 @@ public class GameBehaviour : MonoBehaviour {
         GenerateField();
         CenterField();
 
+        audioSource = gameObject.AddComponent<AudioSource>();
+        matchSound = (AudioClip)Resources.Load("Sounds/matchSound");
+
         TurnsLeft = TURNS_FOR_GAME;
 
-        PauseGame();
-        //isShowRules = true;
+        pauseButton = GameObject.Find("Pause Button");
+        pauseButton.SetActive(false);
+        Pause();
+
+        isShowRules = true;
     }
 
     
@@ -62,8 +77,17 @@ public class GameBehaviour : MonoBehaviour {
 		
 	}
 
-    private void PauseGame()
+    internal void Pause()
     {
+        isPaused = !isPaused;
+        field.SetActive(!isPaused);
+    }
+
+    internal void Mute()
+    {
+        //isMuted = !isMuted;
+        AudioSource audioSource = GetComponent<AudioSource>();
+        audioSource.mute = !audioSource.mute;
     }
 
     void OnGUI()
@@ -75,7 +99,7 @@ public class GameBehaviour : MonoBehaviour {
         GUI.skin.window.onNormal.background = texture;
         if (isShowRules)
         {
-            GUI.Window(0, new Rect((Screen.width / 2) - 150, (Screen.height / 2) - 75, 300, 100), showMission, "Mission");
+            GUI.ModalWindow(0, new Rect((Screen.width / 2) - 150, (Screen.height / 2) - 75, 300, 100), showMission, "Mission");
         }
     }
 
@@ -86,7 +110,8 @@ public class GameBehaviour : MonoBehaviour {
         if (GUI.Button(new Rect(110, 60, 80, 30), "OK"))
         {
             isShowRules = false;
-
+            Pause();
+            pauseButton.SetActive(true);
             /*SceneManager.UnloadSceneAsync("EmptyScene");
             SceneManager.LoadSceneAsync("CheckerScene");*/
         }
@@ -99,9 +124,9 @@ public class GameBehaviour : MonoBehaviour {
         {
             throw new Exception("Too small field for this game. Generate at least 3*3 field using MAX_ROWS and MAX_COLS constants.");
         }
-        else if (MAX_ROWS > 9 || MAX_COLS > 20)
+        else if (MAX_ROWS > 9 || MAX_COLS > 18)
         {
-            throw new Exception("Too big field for this game. Generate no more than 9*20 field using MAX_ROWS and MAX_COLS constants.");
+            throw new Exception("Too big field for this game. Generate no more than 9*18 field using MAX_ROWS and MAX_COLS constants.");
         }
 
         field = GameObject.Find("Game Field");
@@ -138,7 +163,7 @@ public class GameBehaviour : MonoBehaviour {
         if(destroyWaiting <=0 )
         {
             Debug.Log("Turn physics on");
-            TurnPhysics(true);
+            SetPhysics(true);
         }
     }
 
@@ -160,12 +185,20 @@ public class GameBehaviour : MonoBehaviour {
     internal void TrySwipeWith(ChipBehaviour secondChip)
     {
         Debug.Log("TrySwipe");
-        TurnPhysics(false);
+        SetPhysics(false);
         this.secondChip = secondChip;
         movingCounter = 0;
         selectedChip.MoveTo(secondChip.gameObject.transform.position);
         secondChip.MoveTo(selectedChip.gameObject.transform.position);
     //    selectedChip = null;
+    }
+
+    private void MoveChipsBack()
+    {
+        movingCounter = 0;
+        isMovingBack = true;
+        selectedChip.MoveTo(secondChip.gameObject.transform.position);
+        secondChip.MoveTo(selectedChip.gameObject.transform.position);
     }
 
     internal void OnMovingEnd()
@@ -176,13 +209,7 @@ public class GameBehaviour : MonoBehaviour {
             //waiting for the second chip
             return;
         }
-
-        Debug.Log("OnMovingEnd");
-        Debug.Log("selecteChip.row: " + selectedChip.row);
-        Debug.Log("selecteChip.col: " + selectedChip.col);
-        Debug.Log("secondChip.row: " + secondChip.row);
-        Debug.Log("secondChip.col: " + secondChip.col);
-
+        
         int transitRow = selectedChip.row;
         int transitCol = selectedChip.col;
         selectedChip.row = secondChip.row;
@@ -190,32 +217,32 @@ public class GameBehaviour : MonoBehaviour {
         secondChip.row = transitRow;
         secondChip.col = transitCol;
 
-        Debug.Log("After exchange");
-        Debug.Log("selectedChip.row: " + selectedChip.row);
-        Debug.Log("selectedChip.col: " + selectedChip.col);
-        Debug.Log("secondChip.row: " + secondChip.row);
-        Debug.Log("secondChip.col: " + secondChip.col);
-
         chipArray[selectedChip.row, selectedChip.col] = selectedChip;
         chipArray[secondChip.row, secondChip.col] = secondChip;
+
+        if(isMovingBack)
+        {
+            isMovingBack = false;
+            selectedChip = null;
+            secondChip = null;
+            //ChipBehaviour.startSwipeChip = null;
+            //ChipBehaviour.lastMouseEnterSprite = null;
+            SetPhysics(true);
+            return;
+        }
 
         //evade lazy boolean evaluation
         bool firstSuccessfull = СheckAndDestroyForChip(selectedChip);
         bool secondSuccessfull = СheckAndDestroyForChip(secondChip);
         if(firstSuccessfull||secondSuccessfull)
         {
+            audioSource.PlayOneShot(matchSound);
             TurnsLeft--;
-            UpdateScore();
         }
         else
         {
             MoveChipsBack();
         }
-    }
-
-    private void MoveChipsBack()
-    {
-        
     }
 
     private bool СheckAndDestroyForChip(ChipBehaviour chip)
@@ -306,7 +333,7 @@ public class GameBehaviour : MonoBehaviour {
         return (verticalLine.Count >= 3 || horizontalLine.Count >= 3);
     }
 
-    private void TurnPhysics(bool enabled)
+    private void SetPhysics(bool enabled)
     {
         for (int i = 0; i < MAX_ROWS; i++)
         {
