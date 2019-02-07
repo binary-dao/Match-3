@@ -2,19 +2,20 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 public class GameBehaviour : MonoBehaviour {
     internal const int SCORES_FOR_CHIP = 100;
     const int BASE_CHIP_TYPES = 6;
     const int TURNS_FOR_GAME = 20;
-    const int SCORES_TO_WIN = 10000;
+    const int SCORES_TO_WIN = 4000;
 
-    //min 3, max 9
-    const int MAX_ROWS = 9;
+    //min 4, max 9
+    const int MAX_ROWS = 4;
 
-    //min 3, max 18
-    const int MAX_COLS = 18;
+    //min 4, max 18
+    const int MAX_COLS = 4;
 
     private GameObject field;
     private GameObject pauseButton;
@@ -45,6 +46,8 @@ public class GameBehaviour : MonoBehaviour {
     bool isPaused;
     bool isMuted;
     bool isWaitingChipsFall;
+    bool isWin;
+    bool isLose;
     internal bool isFieldActive;
 
     bool isMovingBack;
@@ -87,19 +90,192 @@ public class GameBehaviour : MonoBehaviour {
             {
                 for (int j = 0; j < MAX_COLS; j++)
                 {
-                    //rigidbody.velocity not works there well
-                    if (Math.Abs(chipArray[i, j].rigidbody.transform.position.y - previousPositionY[i, j]) > 0.00001 )
+                    //rigidbody.velocity not works there well; WARNING: can be destroyed between updates
+                    if (chipArray[i, j] && chipArray[i, j].rigidbody && Math.Abs(chipArray[i, j].rigidbody.transform.position.y - previousPositionY[i, j]) > 0.00001 )
                         isSomethingFalling = true;
-                    previousPositionY[i, j] = chipArray[i, j].rigidbody.transform.position.y;
+                    if(chipArray[i, j] && chipArray[i, j].rigidbody)
+                        previousPositionY[i, j] = chipArray[i, j].rigidbody.transform.position.y;
                 }
             }
             if(!isSomethingFalling)
             {
                 isWaitingChipsFall = false;
-                isFieldActive = true;
+                if (!FullMatchCheck())
+                    CheckWinLose();
             }
         }
 	}
+
+    //three predefined points for chips, other place at random
+    private void Shuffle()
+    {
+        selectedChip = null;
+        SetPhysics(false);
+
+        Debug.Log("Shuffle");
+        List<ChipBehaviour> sameChips = GetAnySameChips(0);
+        List<int> excludes = new List<int>();
+
+        ChipBehaviour[] linear = new ChipBehaviour[MAX_ROWS * MAX_COLS];
+
+        //1,0
+        linear[GetLinearIndex(1, 0)] = sameChips[0];
+        excludes.Add(GetLinearIndex(1, 0));
+
+        //1,1
+        linear[GetLinearIndex(1, 1)] = sameChips[1];
+        excludes.Add(GetLinearIndex(1, 1));
+
+        //2,2
+        linear[GetLinearIndex(2, 2)] = sameChips[2];
+        excludes.Add(GetLinearIndex(2, 2));
+
+        for (int i = 0; i < MAX_ROWS; i++)
+        {
+            for (int j = 0; j < MAX_COLS; j++)
+            {
+                if (sameChips.Contains(chipArray[i, j]))
+                {
+                    continue;
+                }
+                int randomPlace = GetRandomWithExcludes(MAX_ROWS * MAX_COLS, excludes);
+                linear[randomPlace] = chipArray[i, j];
+                excludes.Add(randomPlace);
+            }
+        }
+
+        //move
+        for (int i = 0; i < linear.Length; i++)
+        {
+            linear[i].row = GetRowOfLinear(i);
+            linear[i].col = GetColOfLinear(i);
+            linear[i].MoveTo(chipArray[GetRowOfLinear(i), GetColOfLinear(i)].gameObject.transform.position);
+        }
+
+        //move linear array back to 2D
+        for (int i = 0; i < linear.Length; i++)
+        {
+            chipArray[GetRowOfLinear(i), GetColOfLinear(i)] = linear[i];
+        }
+    }
+
+    //2D to linear: row*MAX_ROWS+col
+    private int GetLinearIndex(int row, int col)
+    {
+        return row * MAX_ROWS + col;
+    }
+
+    //linear to 2D: row = index / MAX_ROWS; col = index % MAX_ROWS
+    private int GetRowOfLinear(int index)
+    {
+        return index / MAX_ROWS;
+    }
+
+    private int GetColOfLinear(int index)
+    {
+        return index % MAX_ROWS;
+    }
+
+    private List<ChipBehaviour> GetAnySameChips(int currentType)
+    {
+        List<ChipBehaviour> sameChips = new List<ChipBehaviour>();
+        for (int i = 0; i < MAX_ROWS; i++)
+        {
+            for (int j = 0; j < MAX_COLS; j++)
+            {
+                if (SafeGetType(i, j) == currentType)
+                {
+                    sameChips.Add(chipArray[i, j]);
+                    if(sameChips.Count >=3 )
+                    {
+                        return sameChips;
+                    }
+                }
+            }    
+        }
+        //did not find enough chips of this type, search next recursively
+        return GetAnySameChips(currentType + 1);
+    }
+
+    private void CheckWinLose()
+    {
+        if (scorePoints >= SCORES_TO_WIN)
+            isWin = true;
+        else if (turnsLeft <= 0)
+            isLose = true;
+        else
+            EnablePlayerControl(false);
+    }
+
+    //check and collect chips
+    private bool FullMatchCheck()
+    {
+        bool isNewCombinations = false;
+        List<ChipBehaviour> line = new List<ChipBehaviour>();
+
+        int currentType = -2;
+
+        //horizontal check
+        for(int i = 0; i<MAX_ROWS; i++)
+        {
+            for (int j = 0; j < MAX_COLS; j++)
+            {
+                //new line
+                if (j == 0 || currentType < 0 || currentType != chipArray[i, j].Type)
+                {
+                    if (line.Count >= 3)
+                    {
+                        isNewCombinations = true;
+                        CollectLine(line);
+                    }
+                    line.Clear();
+                    currentType = chipArray[i, j].Type;
+                    line.Add(chipArray[i,j]);
+                }
+                else
+                {
+                    line.Add(chipArray[i, j]);
+                }
+            }
+        }
+
+        //vertical check
+        for (int j = 0; j < MAX_COLS; j++)
+            for (int i = 0; i < MAX_ROWS; i++)
+            {
+                //new line
+                if (i == 0 || currentType < 0 || currentType != chipArray[i, j].Type)
+                {
+                    if (line.Count >= 3)
+                    {
+                        isNewCombinations = true;
+                        CollectLine(line);
+                    }
+                    line.Clear();
+                    currentType = chipArray[i, j].Type;
+                    line.Add(chipArray[i, j]);
+                }
+                else
+                {
+                    line.Add(chipArray[i, j]);
+                }
+            }
+
+        if(isNewCombinations)
+        {
+            audioSource.PlayOneShot(matchSound);
+        }
+
+        return isNewCombinations;
+    }
+
+    private void CollectLine(List<ChipBehaviour> line)
+    {
+        foreach (ChipBehaviour iterChip in line)
+        {
+            iterChip.StartDestroy();
+        }
+    }
 
     internal void Pause()
     {
@@ -109,6 +285,7 @@ public class GameBehaviour : MonoBehaviour {
 
     internal void Mute()
     {
+        Shuffle();
         //isMuted = !isMuted;
         AudioSource audioSource = GetComponent<AudioSource>();
         audioSource.mute = !audioSource.mute;
@@ -122,9 +299,11 @@ public class GameBehaviour : MonoBehaviour {
         GUI.skin.window.onHover.background = texture;
         GUI.skin.window.onNormal.background = texture;
         if (isShowRules)
-        {
             GUI.ModalWindow(0, new Rect((Screen.width / 2) - 150, (Screen.height / 2) - 75, 300, 100), showMission, "Mission");
-        }
+        else if (isWin)
+            GUI.ModalWindow(1, new Rect((Screen.width / 2) - 150, (Screen.height / 2) - 75, 300, 100), showWin, "YOU WIN!");
+        else if (isLose)
+            GUI.ModalWindow(2, new Rect((Screen.width / 2) - 150, (Screen.height / 2) - 75, 300, 100), showLose, "You lose");
     }
 
     void showMission(int windowID)
@@ -135,19 +314,34 @@ public class GameBehaviour : MonoBehaviour {
         {
             isShowRules = false;
             Pause();
-            pauseButton.SetActive(true);
-            isFieldActive = true;
-            /*SceneManager.UnloadSceneAsync("EmptyScene");
-            SceneManager.LoadSceneAsync("CheckerScene");*/
+            EnablePlayerControl(true);
         }
 
     }
 
+    void showWin(int windowID)
+    {
+        GUI.Label(new Rect(65, 20, 200, 250), "You beat this game, congratulation! Wanna try again?");
+        if (GUI.Button(new Rect(110, 60, 80, 30), "Restart"))
+        {
+            SceneManager.LoadScene("BaseScene");
+        }
+    }
+
+    void showLose(int windowID)
+    {
+        GUI.Label(new Rect(65, 20, 200, 250), "You lose. Do you want another try?");
+        if (GUI.Button(new Rect(110, 60, 80, 30), "Restart"))
+        {
+            SceneManager.LoadScene("BaseScene");
+        }
+    }
+
     private void GenerateField()
     {
-        if(MAX_ROWS < 3 || MAX_COLS < 3)
+        if(MAX_ROWS < 4 || MAX_COLS < 4)
         {
-            throw new Exception("Too small field for this game. Generate at least 3*3 field using MAX_ROWS and MAX_COLS constants.");
+            throw new Exception("Too small field for this game. Generate at least 4*4 field using MAX_ROWS and MAX_COLS constants.");
         }
         else if (MAX_ROWS > 9 || MAX_COLS > 18)
         {
@@ -201,7 +395,8 @@ public class GameBehaviour : MonoBehaviour {
             SetPhysics(true);
             for(int i = 0; i < MAX_ROWS; i++)
                 for (int j = 0; j < MAX_COLS; j++)
-                    previousPositionY[i, j] = chipArray[i, j].rigidbody.transform.position.y;
+                    if(chipArray[i, j] && chipArray[i, j].rigidbody)
+                        previousPositionY[i, j] = chipArray[i, j].rigidbody.transform.position.y;
             isWaitingChipsFall = true;
         }
     }
@@ -237,7 +432,7 @@ public class GameBehaviour : MonoBehaviour {
             int type = random.Next(0, BASE_CHIP_TYPES);
             chipBehaviour.Create(type, MAX_ROWS + i, col, true);
             //задать истинные координаты
-            chipBehaviour.row = MAX_COLS - count + i;
+            chipBehaviour.row = MAX_ROWS - count + i;
             chip.transform.position = new Vector2(chip.transform.position.x - fieldHalfWidth, chip.transform.position.y - fieldHalfHeight);
         }
     }
@@ -284,6 +479,16 @@ public class GameBehaviour : MonoBehaviour {
             return;
         }
         
+        //shuffle end
+        if(!selectedChip)
+        {
+            if(!FullMatchCheck())
+            {
+                EnablePlayerControl(true);
+            }
+            return;
+        }
+
         int transitRow = selectedChip.row;
         int transitCol = selectedChip.col;
         selectedChip.row = secondChip.row;
@@ -299,8 +504,7 @@ public class GameBehaviour : MonoBehaviour {
             isMovingBack = false;
             selectedChip = null;
             secondChip = null;
-            SetPhysics(true);
-            isFieldActive = true;
+            EnablePlayerControl(true);
             return;
         }
 
@@ -376,21 +580,13 @@ public class GameBehaviour : MonoBehaviour {
         if(horizontalLine.Count >= 3)
         {
             Debug.Log("It's horizontalLine line in (" + row + ";" + col + ")");
-            foreach (ChipBehaviour iterChip in horizontalLine)
-            {
-                Debug.Log("(" + iterChip.row + ";" + iterChip.col + ")");
-                iterChip.StartDestroy();
-            }
+            CollectLine(horizontalLine);
         }
 
         if (verticalLine.Count >= 3)
         {
             Debug.Log("It's vertical line in (" + row + ";" + col + ")");
-            foreach (ChipBehaviour iterChip in verticalLine)
-            {
-                Debug.Log("(" + iterChip.row + ";" + iterChip.col + ")");
-                iterChip.StartDestroy();
-            }
+            CollectLine(verticalLine);
         }
 
         return (verticalLine.Count >= 3 || horizontalLine.Count >= 3);
@@ -446,21 +642,21 @@ public class GameBehaviour : MonoBehaviour {
         }
         
         int answer = random.Next(0, maxNumber);
-        if(excludes.Count == 0)
+        for(int i=0; i<excludes.Count; i++)
         {
-            return answer;
-        }
-            for(int i=0; i<excludes.Count; i++)
+            if(excludes.Contains(answer))
             {
-                if(answer == excludes[i])
+                answer++;
+                if (answer>= maxNumber)
                 {
-                    answer++;
-                    if (answer>= maxNumber)
-                    {
-                        answer = 0;
-                    }
+                    answer = 0;
                 }
             }
+            else
+            {
+                return answer;
+            }
+        }
         return answer;
     }
 
@@ -611,5 +807,18 @@ public class GameBehaviour : MonoBehaviour {
         GameObject textFieldObject = GameObject.Find("Score Text");
         Text textField = textFieldObject.GetComponent<Text>();
         textField.text = "Score: " + ScorePoints + "     Turns left: " + TurnsLeft;
+    }
+
+    private void EnablePlayerControl(bool skipCheck)
+    {
+        if(skipCheck || IsAnyPossibleMoves())
+        {
+            SetPhysics(true);
+            isFieldActive = true;
+        }
+        else
+        {
+            Shuffle();
+        }
     }
 }
