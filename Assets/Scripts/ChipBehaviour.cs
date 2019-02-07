@@ -12,7 +12,7 @@ public class ChipBehaviour : MonoBehaviour {
     //destroying animation
     private const float DESTROY_TIME = 0.3f;
     private SpriteRenderer spriteRenderer;
-    private bool isDestroying;
+    internal bool isDestroying;
     private float startTime;
     private Color finalColor;
 
@@ -31,7 +31,12 @@ public class ChipBehaviour : MonoBehaviour {
 
     internal int row;
     internal int col;
+
+    //0-5 - base type, 10 - bomb, 20 - rainbow, 30 downside rocket
     private int type;
+    internal static int BOMB_TYPE = 10;
+    internal static int RAINBOW_TYPE = 20;
+    internal static int ROCKET_TYPE = 30;
 
     internal Rigidbody rigidbody;
 

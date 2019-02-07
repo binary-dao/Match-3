@@ -307,8 +307,6 @@ public class GameBehaviour : MonoBehaviour {
 
     internal void Mute()
     {
-        Shuffle();
-        //isMuted = !isMuted;
         AudioSource audioSource = GetComponent<AudioSource>();
         audioSource.mute = !audioSource.mute;
     }
@@ -532,8 +530,8 @@ public class GameBehaviour : MonoBehaviour {
         }
 
         //evade lazy boolean evaluation
-        bool firstSuccessfull = СheckAndDestroyForChip(selectedChip);
-        bool secondSuccessfull = СheckAndDestroyForChip(secondChip);
+        bool firstSuccessfull = СheckAndDestroyForChip(selectedChip, secondChip.Type);
+        bool secondSuccessfull = СheckAndDestroyForChip(secondChip, selectedChip.Type);
         if(firstSuccessfull||secondSuccessfull)
         {
             audioSource.PlayOneShot(matchSound);
@@ -545,8 +543,14 @@ public class GameBehaviour : MonoBehaviour {
         }
     }
 
-    private bool СheckAndDestroyForChip(ChipBehaviour chip)
+    private bool СheckAndDestroyForChip(ChipBehaviour chip, int pairType)
     {
+        if(chip.Type > BASE_CHIP_TYPES)
+        {
+            ActivateBonus(chip, pairType);
+            return true;
+        }
+
         List<ChipBehaviour> horizontalLine = new List<ChipBehaviour>();
         List<ChipBehaviour> verticalLine = new List<ChipBehaviour>();
 
@@ -613,6 +617,45 @@ public class GameBehaviour : MonoBehaviour {
         }
 
         return (verticalLine.Count >= 3 || horizontalLine.Count >= 3);
+    }
+
+    private void ActivateBonus(ChipBehaviour chip, int pairType)
+    {
+        //prevent duplicate activations
+        if(chip.isDestroying)
+        {
+            return;
+        }
+        if (chip.Type == ChipBehaviour.BOMB_TYPE)
+        {
+            for(int i = -1; i<2; i++)
+                for(int j = -1; j<2; j++)
+                    if(chip.row + i >= 0 && chip.col + j >= 0 && chip.row + i < MAX_ROWS && chip.col + j < MAX_COLS && chipArray[chip.row + i, chip.col + j])
+                    {
+                        chipArray[chip.row + i, chip.col + j].StartDestroy();
+                        if (chipArray[chip.row + i, chip.col + j].Type > BASE_CHIP_TYPES)
+                            ActivateBonus(chipArray[chip.row + i, chip.col + j], pairType);
+                    }
+        }
+        if(chip.Type == ChipBehaviour.RAINBOW_TYPE)
+        {
+            for(int i = 0; i < MAX_ROWS; i++)
+                for(int j = 0; j<MAX_COLS; j++)
+                    if(chipArray[i,j] && chipArray[i,j].Type == pairType)
+                    {
+                        chipArray[i,j].StartDestroy();
+                    }
+            chip.StartDestroy();
+        }
+        if (chip.Type == ChipBehaviour.ROCKET_TYPE)
+        {
+            for (int i = chip.row; i>=0; i--)
+                {
+                    chipArray[i, chip.col].StartDestroy();
+                    if (chipArray[i, chip.col].Type > BASE_CHIP_TYPES)
+                        ActivateBonus(chipArray[i, chip.col], pairType);
+                }
+        }
     }
 
     private void SetPhysics(bool enabled)
