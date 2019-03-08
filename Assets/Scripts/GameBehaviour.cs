@@ -153,8 +153,8 @@ public class GameBehaviour : MonoBehaviour
         isHintShowed = true;
         Debug.Log("Show hint");
         var hintCoords = GetAnyPossibleMove();
-        chipArray[(int) hintCoords.x, (int) hintCoords.y].SetHalo(true);
-        chipArray[(int) hintCoords.z, (int) hintCoords.w].SetHalo(true);
+        chipArray[(int)hintCoords.x, (int)hintCoords.y].halo.enabled = true;
+        chipArray[(int)hintCoords.z, (int)hintCoords.w].halo.enabled = true;
     }
 
     //three predefined points for chips, other place at random
@@ -267,7 +267,7 @@ public class GameBehaviour : MonoBehaviour
                 if (line.Count >= 3)
                 {
                     foreach (var iterChip in line) horizontalLine.Add(iterChip);
-                    if (line.Count >= 4) bonusRow[j] = ChipBehaviour.BOMB_TYPE;
+                    if (line.Count >= 4) bonusRow[j] = (int)ChipBehaviour.chipTypes.bomb;
                     isNewCombinations = true;
                     CollectLine(line);
                 }
@@ -289,10 +289,10 @@ public class GameBehaviour : MonoBehaviour
             {
                 if (line.Count >= 3)
                 {
-                    if (line.Count >= 4) bonusRow[j] = ChipBehaviour.ROCKET_TYPE;
+                    if (line.Count >= 4) bonusRow[j] = (int)ChipBehaviour.chipTypes.rocket;
                     foreach (var iterChip in horizontalLine)
                         if (line.Contains(iterChip))
-                            bonusRow[j] = ChipBehaviour.RAINBOW_TYPE;
+                            bonusRow[j] = (int)ChipBehaviour.chipTypes.rainbow;
                     isNewCombinations = true;
                     CollectLine(line);
                 }
@@ -483,7 +483,7 @@ public class GameBehaviour : MonoBehaviour
         for (int i = 0; i < MAX_ROWS; i++)
         for (int j = 0; j < MAX_COLS; j++)
             if (chipArray[i, j])
-                chipArray[i, j].SetHalo(false);
+                chipArray[i, j].halo.enabled = false;
         bonusRow = new int[MAX_COLS];
         isFieldActive = false;
         SetPhysics(false);
@@ -603,18 +603,18 @@ public class GameBehaviour : MonoBehaviour
         if (horizontalLine.Count >= 3)
         {
             Debug.Log("It's horizontalLine line in (" + row + ";" + col + ")");
-            if (horizontalLine.Count >= 4) bonusRow[col] = ChipBehaviour.BOMB_TYPE;
+            if (horizontalLine.Count >= 4) bonusRow[col] = (int)ChipBehaviour.chipTypes.bomb;
             CollectLine(horizontalLine);
         }
 
         if (verticalLine.Count >= 3)
         {
             Debug.Log("It's vertical line in (" + row + ";" + col + ")");
-            if (verticalLine.Count >= 4) bonusRow[col] = ChipBehaviour.ROCKET_TYPE;
+            if (verticalLine.Count >= 4) bonusRow[col] = (int)ChipBehaviour.chipTypes.rocket;
             CollectLine(verticalLine);
         }
 
-        if (verticalLine.Count >= 3 && horizontalLine.Count >= 3) bonusRow[col] = ChipBehaviour.RAINBOW_TYPE;
+        if (verticalLine.Count >= 3 && horizontalLine.Count >= 3) bonusRow[col] = (int)ChipBehaviour.chipTypes.rainbow;
 
         return verticalLine.Count >= 3 || horizontalLine.Count >= 3;
     }
@@ -625,7 +625,7 @@ public class GameBehaviour : MonoBehaviour
         //prevent duplicate activations
         if (chip.isDestroying) return;
         chip.StartDestroy();
-        if (chip.Type == ChipBehaviour.BOMB_TYPE)
+        if (chip.Type == (int)ChipBehaviour.chipTypes.bomb)
             for (int i = -1; i < 2; i++)
             for (int j = -1; j < 2; j++)
                 if (chip.row + i >= 0 && chip.col + j >= 0 && chip.row + i < MAX_ROWS && chip.col + j < MAX_COLS &&
@@ -636,7 +636,7 @@ public class GameBehaviour : MonoBehaviour
                     chipArray[chip.row + i, chip.col + j].StartDestroy();
                 }
 
-        if (chip.Type == ChipBehaviour.RAINBOW_TYPE)
+        if (chip.Type == (int)ChipBehaviour.chipTypes.rainbow)
         {
             for (int i = 0; i < MAX_ROWS; i++)
             for (int j = 0; j < MAX_COLS; j++)
@@ -645,7 +645,7 @@ public class GameBehaviour : MonoBehaviour
             chip.StartDestroy();
         }
 
-        if (chip.Type == ChipBehaviour.ROCKET_TYPE)
+        if (chip.Type == (int)ChipBehaviour.chipTypes.rocket)
             for (int i = chip.row; i >= 0; i--)
             {
                 chipArray[i, chip.col].StartDestroy();

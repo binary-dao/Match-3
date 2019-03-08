@@ -15,15 +15,12 @@ public class ChipBehaviour : MonoBehaviour
     //swipe support
     internal static ChipBehaviour startSwipeChip;
     internal static ChipBehaviour lastMouseEnterSprite;
-    internal static int BOMB_TYPE = 10;
-    internal static int RAINBOW_TYPE = 20;
-    internal static int ROCKET_TYPE = 30;
     internal int col;
     private Vector2 endPosition;
     private Color finalColor;
 
     //selected halo
-    private Component halo;
+    internal Behaviour halo;
 
     private bool isCreated;
     internal bool isDestroying;
@@ -36,7 +33,7 @@ public class ChipBehaviour : MonoBehaviour
     private Vector2 startPosition;
     private float startTime;
 
-    //0-5 - base type, 10 - bomb, 20 - rainbow, 30 downside rocket
+    internal enum chipTypes { base0, base1, base2, base3, base4, base5, bomb = 10, rainbow = 20, rocket = 30 };
     private int type;
 
     internal int Type
@@ -50,8 +47,8 @@ public class ChipBehaviour : MonoBehaviour
     {
         spriteRenderer = GetComponent<SpriteRenderer>();
         finalColor = new Color(0.5f, 0, 1, 1);
-        halo = gameObject.GetComponent("Halo");
-        SetHalo(false);
+        halo = gameObject.GetComponent("Halo") as Behaviour;
+        halo.enabled = false;
     }
 
     private void Update()
@@ -152,28 +149,28 @@ public class ChipBehaviour : MonoBehaviour
         if (GameBehaviour.instance.selectedChip == this)
         {
             startSwipeChip = null;
-            SetHalo(false);
+            halo.enabled = false;
             GameBehaviour.instance.selectedChip = null;
         }
         //no previous checks
         else if (!GameBehaviour.instance.selectedChip)
         {
-            SetHalo(true);
+            halo.enabled = true;
             GameBehaviour.instance.selectedChip = this;
             Debug.Log("Selected chip row:" + row + "; col: " + col);
         }
         //try to change places?
         else if (IsChipsAdjacent(GameBehaviour.instance.selectedChip, this))
         {
-            SetHalo(false);
-            GameBehaviour.instance.selectedChip.SetHalo(false);
+            halo.enabled = false;
+            GameBehaviour.instance.selectedChip.halo.enabled = false;
             GameBehaviour.instance.TrySwipeWith(this);
         }
         //not adjacent, lets check another chip
         else
         {
-            GameBehaviour.instance.selectedChip.SetHalo(false);
-            SetHalo(true);
+            GameBehaviour.instance.selectedChip.halo.enabled = false;
+            halo.enabled = true;
             GameBehaviour.instance.selectedChip = this;
             Debug.Log("Selected chip row:" + row + "; col: " + col);
         }
@@ -184,11 +181,6 @@ public class ChipBehaviour : MonoBehaviour
         int xRange = Math.Abs(firstChip.col - secondChip.col);
         int yRange = Math.Abs(firstChip.row - secondChip.row);
         return xRange + yRange == 1;
-    }
-
-    internal void SetHalo(bool enabled)
-    {
-        halo.GetType().GetProperty("enabled").SetValue(halo, enabled, null);
     }
 
     //it's... magic gone
